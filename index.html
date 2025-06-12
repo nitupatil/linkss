@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>YoyooLinks</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      margin: 0;
+      background: #f9f9f9;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 20px;
+      background: #202020;
+      color: #fff;
+    }
+    header h1 {
+      margin: 0;
+      font-size: 24px;
+    }
+    #search {
+      width: 100%;
+      padding: 12px;
+      font-size: 16px;
+      box-sizing: border-box;
+      margin: 10px auto;
+    }
+    .tabs {
+      display: flex;
+      justify-content: center;
+      gap: 20px;
+      margin: 10px 0;
+    }
+    .tabs button {
+      padding: 10px 20px;
+      border: none;
+      background: #ddd;
+      cursor: pointer;
+      border-radius: 5px;
+    }
+    .tabs button.active {
+      background: #202020;
+      color: #fff;
+    }
+    .cards {
+      display: grid;
+      gap: 20px;
+      padding: 20px;
+      grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    }
+    .card {
+      background: #fff;
+      padding: 15px;
+      border-radius: 10px;
+      box-shadow: 0 0 5px rgba(0,0,0,0.1);
+    }
+    .card h3 {
+      margin-top: 0;
+    }
+    .card a {
+      font-size: 14px;
+      color: blue;
+    }
+    .meta {
+      margin-top: 10px;
+      display: flex;
+      justify-content: space-between;
+    }
+    .meta button {
+      border: none;
+      background: none;
+      cursor: pointer;
+    }
+    .fab {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      width: 50px;
+      height: 50px;
+      background: #202020;
+      color: #fff;
+      border-radius: 50%;
+      font-size: 30px;
+      text-align: center;
+      line-height: 50px;
+      cursor: pointer;
+    }
+    .modal {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0,0,0,0.5);
+      display: none;
+      justify-content: center;
+      align-items: center;
+    }
+    .modal-content {
+      background: #fff;
+      padding: 20px;
+      border-radius: 10px;
+      width: 300px;
+    }
+    .modal-content input {
+      width: 100%;
+      padding: 10px;
+      margin-bottom: 10px;
+    }
+    .modal-content button {
+      width: 100%;
+      padding: 10px;
+      background: #202020;
+      color: #fff;
+      border: none;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>YoyooLinks</h1>
+  </header>
+  <input type="text" id="search" placeholder="Search by title, URL, or code...">
+  <div class="tabs">
+    <button id="tab-all" class="active">All</button>
+    <button id="tab-trending">Trending</button>
+  </div>
+  <div class="cards" id="cardContainer"></div>
+  <div class="fab" onclick="toggleModal()">+</div>
+  <div class="modal" id="modal">
+    <div class="modal-content">
+      <input type="text" id="titleInput" placeholder="Title">
+      <input type="url" id="urlInput" placeholder="https://...">
+      <button onclick="addLink()">Add Link</button>
+    </div>
+  </div>
+
+  <script>
+    let linkData = {};
+    const lastAction = {};
+
+    function saveData() {
+      localStorage.setItem("yoyooLinksData", JSON.stringify(linkData));
+    }
+
+    function loadData() {
+      const stored = localStorage.getItem("yoyooLinksData");
+      if (stored) {
+        try {
+          linkData = JSON.parse(stored);
+        } catch (e) {
+          console.error("Failed to load data", e);
+        }
+      }
+    }
+
+    function generateCode() {
+      let code;
+      do {
+        code = Math.floor(100000 + Math.random() * 900000).toString();
+      } while (linkData[code]);
+      return code;
+    }
+
+    function renderLinks(filter = "all") {
+      const container = document.getElementById("cardContainer");
+      const now = Date.now();
+      container.innerHTML = "";
+      Object.entries(linkData).forEach(([code, data]) => {
+        if (filter === "trending") {
+          const recentViews = data.views.filter(v => now - v < 12 * 60 * 60 * 1000);
+          if (recentViews.length < 1) return;
+        }
+        const card = document.createElement("div");
+        card.className = "card";
+        card.innerHTML = `
+          <h3>${data.title} (${code})</h3>
+          <a href="${data.url}" target="_blank" onclick="trackView('${code}')">${data.url}</a>
+          <div class="meta">
+            <button onclick="toggleLike('${code}')">❤️ ${data.likes}</button>
+            <button onclick="toggleDislike('${code}')">👎 ${data.dislikes}</button>
+            <span>👁 ${data.views.length}</span>
+          </div>
+        `;
+        container.appendChild(card);
+      });
+    }
+
+    function toggleModal() {
+      const modal = document.getElementById("modal");
+      modal.style.display = modal.style.display === "flex" ? "none" : "flex";
+    }
+
+    function addLink() {
+      const title = document.getElementById("titleInput").value;
+      const url = document.getElementById("urlInput").value;
+      if (!title || !url) return alert("Please fill out both fields.");
+      const code = generateCode();
+      linkData[code] = {
+        title,
+        url,
+        likes: 0,
+        dislikes: 0,
+        views: [],
+        createdAt: Date.now()
+      };
+      toggleModal();
+      saveData();
+      renderLinks(activeTab);
+    }
+
+    function toggleLike(code) {
+      const now = Date.now();
+      const last = lastAction[code]?.like || 0;
+      if (now - last < 5 * 60 * 1000) return alert("Please wait 5 mins to like again");
+      if (linkData[code].dislikes > 0) linkData[code].dislikes--;
+      linkData[code].likes++;
+      lastAction[code] = { ...(lastAction[code] || {}), like: now };
+      saveData();
+      renderLinks(activeTab);
+    }
+
+    function toggleDislike(code) {
+      const now = Date.now();
+      const last = lastAction[code]?.dislike || 0;
+      if (now - last < 5 * 60 * 1000) return alert("Please wait 5 mins to dislike again");
+      if (linkData[code].likes > 0) linkData[code].likes--;
+      linkData[code].dislikes++;
+      lastAction[code] = { ...(lastAction[code] || {}), dislike: now };
+      saveData();
+      renderLinks(activeTab);
+    }
+
+    function trackView(code) {
+      linkData[code].views.push(Date.now());
+      saveData();
+    }
+
+    document.getElementById("search").addEventListener("input", function() {
+      const query = this.value.toLowerCase();
+      const cards = document.querySelectorAll(".card");
+      cards.forEach(card => {
+        const text = card.innerText.toLowerCase();
+        card.style.display = text.includes(query) ? "block" : "none";
+      });
+    });
+
+    let activeTab = "all";
+    document.getElementById("tab-all").onclick = () => {
+      activeTab = "all";
+      document.getElementById("tab-all").classList.add("active");
+      document.getElementById("tab-trending").classList.remove("active");
+      renderLinks("all");
+    };
+    document.getElementById("tab-trending").onclick = () => {
+      activeTab = "trending";
+      document.getElementById("tab-trending").classList.add("active");
+      document.getElementById("tab-all").classList.remove("active");
+      renderLinks("trending");
+    };
+
+    loadData();
+    renderLinks();
+  </script>
+</body>
+</html>
